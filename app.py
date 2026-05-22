@@ -52,5 +52,7 @@ if arquivo is not None:
 
     # 8. Exibição do Laudo Clínico Imediato na tela
     st.markdown("---")
-    st.markdown(f"## Laudo: :{cor}[{laudo}]")
-    st.write(f"ℹ️ **Orientação Cirúrgica Sugerida:** {conduta}")
+    if cor == "purple" or cor == "red" or cor == "darkorange" or cor == "orange":
+    st.warning(f"⚠️ **Conduta Cirúrgica:** {conduta}")
+else:
+    st.success(f"✅ **Conduta Cirúrgica:** {conduta}")
