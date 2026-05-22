@@ -42,7 +42,7 @@ if arquivo is not None:
         if media_vermelho <= 45.0:
             laudo, cor, conduta = "G0 - Cristalino Transparente / Incipiente", "green", "Parâmetros mínimos de energia."
         elif media_vermelho <= 90.0:
-            laudo, cor, conduta = "G1 - Grau I (Catarata Nuclear Inicial)", "limegreen", "Fragmentação fácil. Energia padrão baixa."
+            laudo, cor, conduta = "G1 - Grau I (Catarata Nuclear Inicial)", "violet", "Fragmentação fácil. Energia padrão baixa."
         elif media_vermelho <= 135.0:
             laudo, cor, conduta = "G2 - Grau II (Catarata Nuclear Moderada-Leve)", "blue", "Procedimento cirúrgico padrão estável."
         elif media_vermelho <= 180.0:
