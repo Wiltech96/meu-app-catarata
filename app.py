@@ -3,7 +3,7 @@ import cv2
 import numpy as np
 
 # 1. Configuração visual do aplicativo
-st.set_page_config(page_title="Classificador G0-G6", layout="centered")
+st.set_page_config(page_title="CataractApp G0-G6", layout="centered", page_icon="https://flaticon.com")
 st.title("👁️ Classificador de Catarata Ambulatorial (G0-G6)")
 st.subheader("Sistema de Diagnóstico Instantâneo por Smartphone")
 st.markdown("---")
