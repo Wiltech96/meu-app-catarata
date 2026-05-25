@@ -10,11 +10,11 @@ st.set_page_config(
 )
 st.title("👁️ Novo Sistema Digital Automatizado de Classificação de Catarata")
 st.subheader("Classificação Inteligente por Segmentação de Contorno do Núcleo")
-st.caption("Versão Homologada: Segmentação Densitométrica Inteligente por Canal V (HSV)")
+st.caption("Versão Final: Segmentação Cromática por Matiz Amarelo/Âmbar (HSV)")
 st.markdown("---")
 
 # 2. Área de Upload da Imagem do Paciente
-arquivo = st.file_uploader("Insira a foto da biomicroscopia (Fenda ou Feixe Aberto):", type=["png", "jpg", "jpeg"])
+arquivo = st.file_uploader("Insira a foto da biomicroscopia (Fenda Fina Vertical):", type=["png", "jpg", "jpeg"])
 
 if arquivo is not None:
     # 3. Ler a imagem enviada pelo smartphone
@@ -22,67 +22,89 @@ if arquivo is not None:
     img = cv2.imdecode(file_bytes, 1)
     altura, largura, _ = img.shape
     
-    # 4. MARGEM DE SEGURANÇA EXPANDIDA (Dá espaço para a IA varrer o centro do olho)
-    ymin, ymax = int(altura * 0.30), int(altura * 0.70)  
-    xmin, xmax = int(largura * 0.35), int(largura * 0.65) 
+    # 4. MARGEM DE SEGURANÇA EXPANDIDA (ROI Ampla para capturar o cristalino)
+    ymin, ymax = int(altura * 0.25), int(altura * 0.75)  
+    xmin, xmax = int(largura * 0.30), int(largura * 0.70) 
     roi_bgr = img[ymin:ymax, xmin:xmax]
     
-    # 5. INTELIGÊNCIA ARTIFICIAL: FILTRO BINÁRIO POR DENSIDADE DE BRILHO (Substitui o Canny)
+    # 5. INTELIGÊNCIA ARTIFICIAL: SEGMENTAÇÃO CROMÁTICA DA ESCLEROSE NUCLEAR (HSV)
     img_hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
     roi_hsv = img_hsv[ymin:ymax, xmin:xmax]
-    roi_v = roi_hsv[:, :, 2] # Isola a luminosidade pura
     
-    # Suaviza a imagem e aplica uma máscara binária: isola o bloco de luz eliminando o fundo escuro do olho
-    roi_blur = cv2.GaussianBlur(roi_v, (5, 5), 0)
-    _, mascara_binaria = cv2.threshold(roi_blur, 45, 255, cv2.THRESH_BINARY)
+    # Suaviza a imagem para remover granulações e ruídos digitais do celular
+    roi_blur = cv2.GaussianBlur(roi_hsv, (9, 9), 0)
     
-    # Encontra os contornos desse bloco de luz real
-    contornos, _ = cv2.findContours(mascara_binaria, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    # TRAVA REVOLUCIONÁRIA: Define os limites exatos da cor amarela/alaranjada do núcleo da catarata
+    # H (Matiz): vai de 5 a 38 (cobre do marrom/laranja ao amarelo claro). S e V filtram o fundo escuro.
+    limite_inferior = np.array([5, 40, 40])
+    limite_superior = np.array([38, 255, 255])
     
-    # Máscara final de captura de pixels
-    mascara_final = np.zeros(roi_v.shape, dtype=np.uint8)
+    # Cria a máscara que isola apenas o tecido que possui a cor amarela da catarata
+    mascara_amarela = cv2.inRange(roi_blur, limite_inferior, limite_superior)
+    
+    # MORFOLOGIA MATEMÁTICA: Aplica um fechamento (Closing) para fundir o contorno e fechar buracos internos
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
+    mascara_limpa = cv2.morphologyEx(mascara_amarela, cv2.MORPH_CLOSE, kernel)
+    
+    # Encontra os contornos desse bloco de cor sólido e macio
+    contornos, _ = cv2.findContours(mascara_limpa, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    mascara_final = np.zeros(mascara_limpa.shape, dtype=np.uint8)
     img_viz = img.copy()
     
-    # A IA valida e seleciona o contorno real do feixe de luz (descarta ruídos e pontinhos)
-    contornos_validos = [c for c in contornos if cv2.contourArea(c) > 200]
+    # Filtra ruídos pequenos para focar apenas na massa principal do núcleo
+    contornos_validos = [c for c in contornos if cv2.contourArea(c) > 500]
     
     if contornos_validos:
+        # Seleciona o maior bloco de cor amarela detectado (o núcleo da catarata)
         maior_contorno = max(contornos_validos, key=cv2.contourArea)
         cv2.drawContours(mascara_final, [maior_contorno], -1, 255, thickness=cv2.FILLED)
         
-        # Desenha a linha verde anatômica real adaptada ao formato do feixe na tela do médico
+        # Ajusta e desenha a linha verde lisa e anatômica na tela do médico
         contorno_ajustado = maior_contorno + np.array([xmin, ymin])
         cv2.drawContours(img_viz, [contorno_ajustado], -1, (0, 255, 0), 4)
-        caption_imagem = "Fenda Anatômica do Núcleo Detectada e Segmentada com Sucesso"
+        caption_imagem = "Núcleo Esclerosado Amarelo Detectado e Contornado com Precisão Óptica"
     else:
-        # Contingência absoluta caso a foto esteja escura demais
-        cv2.rectangle(mascara_final, (int(roi_v.shape[1]*0.4), int(roi_v.shape[0]*0.3)), (int(roi_v.shape[1]*0.6), int(roi_v.shape[0]*0.7)), 255, -1)
-        cv2.rectangle(img_viz, (int(largura * 0.46), int(altura * 0.40)), (int(largura * 0.54), int(altura * 0.60)), (0, 255, 0), 4)
-        caption_imagem = "Modo de Contingência: Aplicado Retorcido Central de Segurança"
+        # Contingência absoluta para cristalinos totalmente transparentes (G0) ou brancos puros (G5)
+        # Se não houver amarelo esclerosado, o software roda uma limiarização por brilho puro no canal V
+        roi_v = roi_blur[:, :, 2]
+        _, mascara_v = cv2.threshold(roi_v, 80, 255, cv2.THRESH_BINARY)
+        contornos_v, _ = cv2.findContours(mascara_v, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        
+        if contornos_v:
+            maior_v = max(contornos_v, key=cv2.contourArea)
+            cv2.drawContours(mascara_final, [maior_v], -1, 255, thickness=cv2.FILLED)
+            cv2.drawContours(img_viz, [maior_v + np.array([xmin, ymin])], -1, (0, 255, 0), 4)
+            caption_imagem = "Fenda Detectada por Refração de Brilho (Cristalino Claro ou Opacidade Total)"
+        else:
+            cv2.rectangle(mascara_final, (int(mascara_limpa.shape[1]*0.4), int(mascara_limpa.shape[0]*0.3)), (int(mascara_limpa.shape[1]*0.6), int(mascara_limpa.shape[0]*0.7)), 255, -1)
+            cv2.rectangle(img_viz, (int(largura * 0.46), int(altura * 0.40)), (int(largura * 0.54), int(altura * 0.60)), (0, 255, 0), 4)
+            caption_imagem = "Modo de Segurança: Aplicado Retângulo Fixo de Contingência"
 
-    # Exibe a imagem com o contorno ajustado na tela
+    # Exibe a imagem processada com o contorno perfeito na tela
     st.image(img_viz, channels="BGR", caption=caption_imagem, use_container_width=True)
     
-    # 6. EXTRAÇÃO MULTIDIMENSIONAL DE MÉTRICAS FILTRADAS PELA GEOMETRIA DA IA
-    media_s = float(cv2.mean(roi_hsv[:, :, 1], mask=mascara_final)[0]) # Saturação
-    media_v = float(cv2.mean(roi_hsv[:, :, 2], mask=mascara_final)[0]) # Luminosidade/Brilho V
+    # 6. EXTRAÇÃO MULTIDIMENSIONAL DE MÉTRICAS FILTRADAS PELA NOVA GEOMETRIA
+    media_h = float(cv2.mean(roi_hsv[:, :, 0], mask=mascara_final)) # Matiz
+    media_s = float(cv2.mean(roi_hsv[:, :, 1], mask=mascara_final)) # Saturação
+    media_v = float(cv2.mean(roi_hsv[:, :, 2], mask=mascara_final)) # Luminosidade V
     
     # Extração dos canais RGB originais para cálculo da razão dentro do contorno
-    media_r = float(cv2.mean(roi_bgr[:, :, 2], mask=mascara_final)[0])
-    media_b = float(cv2.mean(roi_bgr[:, :, 0], mask=mascara_final)[0])
+    media_r = float(cv2.mean(roi_bgr[:, :, 2], mask=mascara_final))
+    media_b = float(cv2.mean(roi_bgr[:, :, 0], mask=mascara_final))
     razao_vermelho_azul = media_r / (media_b + 0.001)
     
-    # 7. MOTOR DE DECISÃO INTELIGENTE RECALIBRADO PARA ÁREA INTEGRAL
+    # 7. MOTOR DE DECISÃO INTELIGENTE RECALIBRADO PARA ÁREA INTEGRAL DO NÚCLEO
     
-    # REGRA DA CATARATA BRANCA (G5): Saturação de cor baixa (gesso leitoso) + Brilho expressivo
+    # REGRA DA CATARATA BRANCA (G5): Saturação de cor muito baixa (gesso leitoso) + Brilho expressivo
     if media_s < 45.0 and media_v > 115.0:
         laudo = "G5 - Variante Catarata Branca / Total Intumescente"
         cor = "red"
         conduta = "Opacificação total cortical. Alto risco de hipertensão intralenticular (Sinal da Bandeira Argentina). Realizar descompressão prévia com agulha fina antes da capsulorréxis. Usar Azul de Tripano obrigatório."
-        faco_param = {"Torsional (Ozil)": "0% (Usar apenas I/A inicial)", "Faco Longitudinal": "0-10% Linear", "Vácuo Máximo": "300 mmHg", "Fluxo de Aspiração": "30 cc/min", "IOP Alvo": "55 mmHg"}
+        faco_param = {"Torsional (Ozil)": "0% (Usar apenas I/A inicial)", "Faco Longitudinal": "0-10% Linear", "Vácsuo Máximo": "300 mmHg", "Fluxo de Aspiração": "30 cc/min", "IOP Alvo": "55 mmHg"}
     
     # REGRA DA CATARATA RUBRA (G6): Razão de vermelho/azul alta (tom de tijolo profundo/marrom)
-    elif razao_vermelho_azul > 3.0 and media_v > 60.0:
+    elif razao_vermelho_azul > 3.2 and media_v > 60.0:
         laudo = "G6 - Variante Catarata Rubra / Brunescente Ultra-Densa"
         cor = "purple"
         conduta = "Dureza máxima (rocha). Absorção cromática severa. Exige proteção endotelial máxima (Soft-Shell rígido) e parâmetros de alta energia torsional (Centurion Ozil 100% Contínuo)."
@@ -90,12 +112,12 @@ if arquivo is not None:
     
     # ESCALA PROGRESSIVA NUCLEAR TÍPICA (G0 a G4) - Baseada no Brilho V concentrado do contorno real
     else:
-        if media_v <= 55.0:
+        if media_v <= 50.0:
             laudo = "G0 - Cristalino Transparente / Catarata Nuclear Incipiente"
             cor = "green"
             conduta = "Parâmetros mínimos de energia. Cristalino gelatinoso e macio. Priorizar aspiração mecânica pura."
             faco_param = {"Torsional (Ozil)": "0%", "Faco Longitudinal": "0-10% Linear", "Vácuo Máximo": "300 mmHg", "Fluxo de Aspiração": "30 cc/min", "IOP Alvo": "55 mmHg"}
-        elif media_v <= 110.0:
+        elif media_v <= 105.0:
             laudo = "G1 - Grau I (Catarata Nuclear Inicial)"
             cor = "green"
             conduta = "Fragmentação fácil. Baixa densidade nuclear. Parâmetros cirúrgicos conservadores de baixa energia."
@@ -144,11 +166,3 @@ if arquivo is not None:
         
     # 9. Painel de Parâmetros Alcon Centurion
     st.markdown("### ⚙️ Programação Sugerida para Alcon Centurion")
-    col1, col2 = st.columns(2)
-    with col1:
-        st.metric("Energia Torsional (Ozil)", faco_param["Torsional (Ozil)"])
-        st.metric("Vácuo Máximo", faco_param["Vácuo Máximo"])
-        st.metric("Pressão Intraocular (IOP)", faco_param["IOP Alvo"])
-    with col2:
-        st.metric("Faco Longitudinal", faco_param["Faco Longitudinal"])
-        st.metric("Fluxo de Aspiração", faco_param["Fluxo de Aspiração"])
