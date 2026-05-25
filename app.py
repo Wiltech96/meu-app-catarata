@@ -10,11 +10,11 @@ st.set_page_config(
 )
 st.title("👁️ NucleoClass - Análise Densitométrica de Catarata")
 st.subheader("Classificação Automatizada Ambulatorial (G0 a G6)")
-st.caption("Versão Homologada: Algoritmo Adaptativo com Filtro de Luminância Digital (ITU-R BT.601)")
+st.caption("Versão Final Homologada: Matriz Densitométrica por Tabela")
 st.markdown("---")
 
 # 2. Área de Upload da Imagem do Paciente
-arquivo = st.file_uploader("Insira a foto da biomicroscopia (Fenda ou Feixe Aberto):", type=["png", "jpg", "jpeg"])
+arquivo = st.file_uploader("Insira a foto da biomicroscopia (Fenda Fina Vertical):", type=["png", "jpg", "jpeg"])
 
 if arquivo is not None:
     # 3. Ler a imagem enviada pelo smartphone
@@ -22,27 +22,30 @@ if arquivo is not None:
     img = cv2.imdecode(file_bytes, 1)
     altura, largura, _ = img.shape
     
-    # 4. RECORTE ANATÔMICO PADRÃO (Área Central da Pupila)
-    ymin, ymax = int(altura * 0.35), int(altura * 0.65)  
-    xmin, xmax = int(largura * 0.35), int(largura * 0.65) 
+    # 4. RETÂNGULO CONSTRANGIDO VERTICAL (Filete centralizado - impede contaminação periférica)
+    ymin, ymax = int(altura * 0.40), int(altura * 0.60)  # Centralizado verticalmente (núcleo)
+    xmin, xmax = int(largura * 0.46), int(largura * 0.54) # Estreito: trava rigorosamente dentro da linha de luz
     
-    # 5. PROCESSAMENTO DIGITAL DE SINAIS (RGB, HSV e LUMINÂNCIA PURA)
+    # 5. PROCESSAMENTO DIGITAL DE SINAIS (Espaço HSV, RGB e Luminância Perceptual)
+    img_hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    roi_hsv = img_hsv[ymin:ymax, xmin:xmax]
+    
+    # Extração das médias dos canais HSV dentro do filete da fenda
+    media_h = float(np.mean(roi_hsv[:, :, 0])) # Matiz (Cor Pura)
+    media_s = float(np.mean(roi_hsv[:, :, 1])) # Saturação (Vivacidade da cor)
+    media_v = float(np.mean(roi_hsv[:, :, 2])) # Luminosidade/Brilho Puro (Canal V)
+    
+    # Extração dos canais RGB originais na ROI para o cálculo da Luminância e Razão
     canal_red = img[:, :, 2]
     canal_green = img[:, :, 1]
     canal_blue = img[:, :, 0]
     
-    # Extração das médias RGB na Área de Interesse (ROI)
     media_r = float(np.mean(canal_red[ymin:ymax, xmin:xmax]))
     media_g = float(np.mean(canal_green[ymin:ymax, xmin:xmax]))
     media_b = float(np.mean(canal_blue[ymin:ymax, xmin:xmax]))
     
-    # CÁLCULO DA LUMINÂNCIA REAL COMBINADA (Fórmula Óptica Perceptual BT.601)
+    # CÁLCULO DA LUMINÂNCIA PERCEPTUAL REAL (Fórmula Óptica Internacional ITU-R BT.601)
     luminancia_y = (0.299 * media_r) + (0.587 * media_g) + (0.114 * media_b)
-    
-    # Espaço HSV para cálculo de saturação e suporte de brilho V
-    img_hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-    media_s = float(np.mean(img_hsv[ymin:ymax, xmin:xmax, 1])) # Saturação
-    media_v = float(np.mean(img_hsv[ymin:ymax, xmin:xmax, 2])) # Brilho V
     
     # Cálculo da razão cromática adaptativa Vermelho/Azul (Extremo G6)
     razao_vermelho_azul = media_r / (media_b + 0.001)
@@ -50,42 +53,42 @@ if arquivo is not None:
     # 6. Desenha o retângulo visual na imagem para conferência do médico
     img_viz = img.copy()
     cv2.rectangle(img_viz, (xmin, ymin), (xmax, ymax), (0, 255, 0), 4)
-    st.image(img_viz, channels="BGR", caption="Área de Amostragem Analisada pelo Sensor", use_container_width=True)
+    st.image(img_viz, channels="BGR", caption="Área de Leitura Restrita ao Núcleo da Fenda", use_container_width=True)
     
-    # 7. MOTOR DE DECISÃO INTELIGENTE ATUALIZADO (Filtros de Luminância e Razão)
+    # 7. MOTOR DE DECISÃO INTELIGENTE ESTÁVEL
     
-    # TRAVA DEFINITIVA CATARATA BRANCA (G5): Saturação baixa (gesso) OU Luminância total estourada (leitoso)
-    if (media_s < 40.0 and luminancia_y > 110.0) or (luminancia_y >= 150.0 and razao_vermelho_azul < 2.0):
+    # REGRA DA CATARATA BRANCA (G5): Saturação de cor muito baixa (gesso leitoso) + Brilho expressivo
+    if media_s < 45.0 and media_v > 115.0:
         laudo = "G5 - Variante Catarata Branca / Total Intumescente"
         cor = "red"
-        conduta = "Opacificação total cortical e estouro de reflexão. Alto risco de hipertensão intralenticular (Sinal da Bandeira Argentina). Realizar descompressão prévia com agulha fina antes da capsulorréxis. Usar Azul de Tripano obrigatório."
+        conduta = "Opacificação total cortical. Alto risco de hipertensão intralenticular (Sinal da Bandeira Argentina). Realizar descompressão prévia com agulha fina antes da capsulorréxis. Usar Azul de Tripano obrigatório."
         faco_param = {"Torsional (Ozil)": "0% (Usar apenas I/A inicial)", "Faco Longitudinal": "0-10% Linear", "Vácuo Máximo": "300 mmHg", "Fluxo de Aspiração": "30 cc/min", "IOP Alvo": "55 mmHg"}
     
-    # TRAVA CATARATA RUBRA (G6): Razão de vermelho/azul alta (tom de tijolo/marrom escuro profundo)
-    elif razao_vermelho_azul > 3.0 and media_v > 65.0:
+    # REGRA DA CATARATA RUBRA (G6): Razão de vermelho/azul alta (tom de tijolo profundo/marrom)
+    elif razao_vermelho_azul > 3.2 and media_v > 60.0:
         laudo = "G6 - Variante Catarata Rubra / Brunescente Ultra-Densa"
         cor = "purple"
         conduta = "Dureza máxima (rocha). Absorção cromática severa. Exige proteção endotelial máxima (Soft-Shell rígido) e parâmetros de alta energia torsional (Centurion Ozil 100% Contínuo)."
         faco_param = {"Torsional (Ozil)": "100% Contínuo", "Faco Longitudinal": "20-30% em Pulso", "Vácuo Máximo": "450-500 mmHg", "Fluxo de Aspiração": "40-45 cc/min", "IOP Alvo": "80 mmHg"}
     
-    # ESCALA PROGRESSIVA NUCLEAR TÍPICA (G0 a G4) - Baseada no Brilho V Estabilizado
+    # ESCALA PROGRESSIVA NUCLEAR TÍPICA (G0 a G4) - Baseada no Brilho V concentrado
     else:
-        if media_v <= 55.0:
+        if media_v <= 50.0:
             laudo = "G0 - Cristalino Transparente / Catarata Nuclear Incipiente"
             cor = "green"
             conduta = "Parâmetros mínimos de energia. Cristalino gelatinoso e macio. Priorizar aspiração mecânica pura."
             faco_param = {"Torsional (Ozil)": "0%", "Faco Longitudinal": "0-10% Linear", "Vácuo Máximo": "300 mmHg", "Fluxo de Aspiração": "30 cc/min", "IOP Alvo": "55 mmHg"}
-        elif media_v <= 105.0:
+        elif media_v <= 100.0:
             laudo = "G1 - Grau I (Catarata Nuclear Inicial)"
             cor = "green"
             conduta = "Fragmentação fácil. Baixa densidade nuclear. Parâmetros cirúrgicos conservadores de baixa energia."
             faco_param = {"Torsional (Ozil)": "20% Burst", "Faco Longitudinal": "0% Linear", "Vácuo Máximo": "350 mmHg", "Fluxo de Aspiração": "32 cc/min", "IOP Alvo": "60 mmHg"}
-        elif media_v <= 150.0:
+        elif media_v <= 145.0:
             laudo = "G2 - Grau II (Catarata Nuclear Moderada-Leve)"
             cor = "blue"
             conduta = "Densidade moderada padrão. Fragmentação mecânica fácil. Procedimento convencional estável do serviço."
             faco_param = {"Torsional (Ozil)": "40% Burst/Pulse", "Faco Longitudinal": "0-5% Linear", "Vácuo Máximo": "400 mmHg", "Fluxo de Aspiração": "35 cc/min", "IOP Alvo": "65 mmHg"}
-        elif media_v <= 195.0:
+        elif media_v <= 190.0:
             laudo = "G3 - Grau III (Catarata Nuclear Moderada-Avançada)"
             cor = "orange"
             conduta = "Núcleo denso. Obrigatoriedade de técnicas mecânicas de fratura (Faco-Chop ou Quick Chop) para poupar energia ultrassônica total (CDE)."
@@ -101,11 +104,21 @@ if arquivo is not None:
     st.markdown("### 📊 Laudo Computacional")
     st.subheader(laudo)
     
-    # Painel de Auditoria Densitométrica (Essencial para o TCC)
-    st.markdown("#### 🔬 Métricas do Núcleo")
+    # NOVA TABELA CIENTÍFICA DE MÉTRICAS DO NÚCLEO LENTICULAR (ITU-R BT.601 + HSV + RGB)
+    st.markdown("#### 🔬 Matriz de Parâmetros Ópticos")
     dados_metricas = {
-        "Métrica Analisada": ["Luminância Perceptual (Y)", "Brilho Puro (Canal V)", "Saturação de Cor (Canal S)", "Razão Cromática (R/A)"],
-        "Valor Extraído": [f"{luminancia_y:.1f}", f"{media_v:.1f}", f"{media_s:.1f}", f"{razao_vermelho_azul:.2f}"]
+        "Métrica Analisada": [
+            "Luminância Perceptual (Y - Padrão BT.601)", 
+            "Brilho Puro do Cristalino (Canal V)", 
+            "Saturação Cromática (Canal S)", 
+            "Razão Cromática Dinâmica (Vermelho / Azul)"
+        ],
+        "Valor Numérico Extraído": [
+            f"{luminancia_y:.1f}", 
+            f"{media_v:.1f}", 
+            f"{media_s:.1f}", 
+            f"{razao_vermelho_azul:.2f}"
+        ]
     }
     st.table(dados_metricas)
     
