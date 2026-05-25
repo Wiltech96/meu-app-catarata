@@ -10,11 +10,11 @@ st.set_page_config(
 )
 st.title("👁️ NucleoClass - Análise Densitométrica de Catarata")
 st.subheader("Classificação Automatizada Ambulatorial (G0 a G6)")
-st.caption("Versão Final: Algoritmo Adaptativo de Saturação para Feixe Amplo")
+st.caption("Versão Ultra-Calibrada: Retângulo Constrangido para Fenda Estreita")
 st.markdown("---")
 
 # 2. Área de Upload da Imagem do Paciente
-arquivo = st.file_uploader("Insira a foto da biomicroscopia (Aceita Fenda ou Feixe Aberto):", type=["png", "jpg", "jpeg"])
+arquivo = st.file_uploader("Insira a foto da biomicroscopia (Fenda Fina Vertical):", type=["png", "jpg", "jpeg"])
 
 if arquivo is not None:
     # 3. Ler a imagem enviada pelo smartphone
@@ -22,15 +22,18 @@ if arquivo is not None:
     img = cv2.imdecode(file_bytes, 1)
     altura, largura, _ = img.shape
     
-    # 4. RECORTE ALARGADO SEGURO (Abraça a área da pupila e resolve o erro do feixe amplo)
-    ymin, ymax = int(altura * 0.35), int(altura * 0.65)  
-    xmin, xmax = int(largura * 0.35), int(largura * 0.65) # Alargado horizontalmente para capturar o bloco total
+    # 4. RETÂNGULO CONSTRANGIDO VERTICAL (Filete centralizado - impede contaminação periférica)
+    ymin, ymax = int(altura * 0.40), int(altura * 0.60)  # Centralizado verticalmente (núcleo)
+    xmin, xmax = int(largura * 0.46), int(largura * 0.54) # Estreito: trava rigorosamente dentro da linha de luz
     
     # 5. PROCESSAMENTO DIGITAL DE SINAIS (Espaço HSV e RGB)
     img_hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-    media_h = float(np.mean(img_hsv[ymin:ymax, xmin:xmax, 0])) # Matiz (Cor)
-    media_s = float(np.mean(img_hsv[ymin:ymax, xmin:xmax, 1])) # Saturação (Vivacidade da cor)
-    media_v = float(np.mean(img_hsv[ymin:ymax, xmin:xmax, 2])) # Valor (Brilho Puro)
+    roi_hsv = img_hsv[ymin:ymax, xmin:xmax]
+    
+    # Extração das médias dos canais HSV dentro do filete da fenda
+    media_h = float(np.mean(roi_hsv[:, :, 0])) # Matiz
+    media_s = float(np.mean(roi_hsv[:, :, 1])) # Saturação (Vivacidade da cor)
+    media_v = float(np.mean(roi_hsv[:, :, 2])) # Luminosidade/Brilho Puro
     
     # Extrai os canais RGB para cálculo da Razão Cromática (Extremo G6)
     canal_red = img[:, :, 2]
@@ -42,42 +45,42 @@ if arquivo is not None:
     # 6. Desenha o retângulo visual na imagem para conferência do médico
     img_viz = img.copy()
     cv2.rectangle(img_viz, (xmin, ymin), (xmax, ymax), (0, 255, 0), 4)
-    st.image(img_viz, channels="BGR", caption="Área Analisada pelo Algoritmo Multidimensional", use_container_width=True)
+    st.image(img_viz, channels="BGR", caption="Área de Leitura Restrita ao Núcleo da Fenda", use_container_width=True)
     
-    # 7. MOTOR DE DECISÃO INTELIGENTE ATUALIZADO (Filtro por Saturação Cromática)
+    # 7. MOTOR DE DECISÃO INTELIGENTE ATUALIZADO (Limiares para ROI Constrangida)
     
-    # REGRA INFALÍVEL DA CATARATA BRANCA (G5): Baixíssima saturação de cor (gesso) + Brilho expressivo
-    if media_s < 35.0 and media_v > 100.0:
+    # REGRA DA CATARATA BRANCA (G5): Saturação de cor muito baixa (gesso leitoso) + Brilho expressivo
+    if media_s < 45.0 and media_v > 115.0:
         laudo = "G5 - Variante Catarata Branca / Total Intumescente"
         cor = "red"
-        conduta = "Opacificação total cortical (leitoza/gesso). Alto risco de hipertensão intralenticular (Sinal da Bandeira Argentina). Realizar descompressão prévia com agulha fina antes da capsulorréxis. Usar Azul de Tripano obrigatório."
+        conduta = "Opacificação total cortical. Alto risco de hipertensão intralenticular (Sinal da Bandeira Argentina). Realizar descompressão prévia com agulha fina antes da capsulorréxis. Usar Azul de Tripano obrigatório."
         faco_param = {"Torsional (Ozil)": "0% (Usar apenas I/A inicial)", "Faco Longitudinal": "0-10% Linear", "Vácuo Máximo": "300 mmHg", "Fluxo de Aspiração": "30 cc/min", "IOP Alvo": "55 mmHg"}
     
-    # REGRA DA CATARATA RUBRA (G6): Razão de vermelho/azul alta (tom de tijolo/âmbar profundo)
-    elif razao_vermelho_azul > 3.0 and media_v > 65.0:
+    # REGRA DA CATARATA RUBRA (G6): Razão de vermelho/azul alta (tom de tijolo profundo/marrom)
+    elif razao_vermelho_azul > 3.2 and media_v > 60.0:
         laudo = "G6 - Variante Catarata Rubra / Brunescente Ultra-Densa"
         cor = "purple"
         conduta = "Dureza máxima (rocha). Absorção cromática severa. Exige proteção endotelial máxima (Soft-Shell rígido) e parâmetros de alta energia torsional (Centurion Ozil 100% Contínuo)."
         faco_param = {"Torsional (Ozil)": "100% Contínuo", "Faco Longitudinal": "20-30% em Pulso", "Vácuo Máximo": "450-500 mmHg", "Fluxo de Aspiração": "40-45 cc/min", "IOP Alvo": "80 mmHg"}
     
-    # ESCALA PROGRESSIVA NUCLEAR TÍPICA (G0 a G4) - Baseada no Brilho V
+    # ESCALA PROGRESSIVA NUCLEAR TÍPICA (G0 a G4) - Baseada no Brilho V concentrado
     else:
-        if media_v <= 55.0:
+        if media_v <= 50.0:
             laudo = "G0 - Cristalino Transparente / Catarata Nuclear Incipiente"
             cor = "green"
             conduta = "Parâmetros mínimos de energia. Cristalino gelatinoso e macio. Priorizar aspiração mecânica pura."
             faco_param = {"Torsional (Ozil)": "0%", "Faco Longitudinal": "0-10% Linear", "Vácuo Máximo": "300 mmHg", "Fluxo de Aspiração": "30 cc/min", "IOP Alvo": "55 mmHg"}
-        elif media_v <= 105.0:
+        elif media_v <= 100.0:
             laudo = "G1 - Grau I (Catarata Nuclear Inicial)"
             cor = "green"
             conduta = "Fragmentação fácil. Baixa densidade nuclear. Parâmetros cirúrgicos conservadores de baixa energia."
             faco_param = {"Torsional (Ozil)": "20% Burst", "Faco Longitudinal": "0% Linear", "Vácuo Máximo": "350 mmHg", "Fluxo de Aspiração": "32 cc/min", "IOP Alvo": "60 mmHg"}
-        elif media_v <= 150.0:
+        elif media_v <= 145.0:
             laudo = "G2 - Grau II (Catarata Nuclear Moderada-Leve)"
             cor = "blue"
             conduta = "Densidade moderada padrão. Fragmentação mecânica fácil. Procedimento convencional estável do serviço."
             faco_param = {"Torsional (Ozil)": "40% Burst/Pulse", "Faco Longitudinal": "0-5% Linear", "Vácuo Máximo": "400 mmHg", "Fluxo de Aspiração": "35 cc/min", "IOP Alvo": "65 mmHg"}
-        elif media_v <= 195.0:
+        elif media_v <= 190.0:
             laudo = "G3 - Grau III (Catarata Nuclear Moderada-Avançada)"
             cor = "orange"
             conduta = "Núcleo denso. Obrigatoriedade de técnicas mecânicas de fratura (Faco-Chop ou Quick Chop) para poupar energia ultrassônica total (CDE)."
@@ -93,15 +96,15 @@ if arquivo is not None:
     st.markdown("### 📊 Laudo Computacional")
     st.subheader(laudo)
     
-    # Métricas para conferência do TCC
-    st.write(f"🔬 *Métricas Extraídas: Brilho(V): {media_v:.1f} | Saturação de Cor(S): {media_s:.1f} | Razão R/A: {razao_vermelho_azul:.2f}*")
+    # Impressão das métricas ocultas puras (Crucial para auditar seu TCC)
+    st.write(f"🔬 *Métricas do Núcleo Puro: Brilho(V): {media_v:.1f} | Saturação(S): {media_s:.1f} | Razão R/A: {razao_vermelho_azul:.2f}*")
     
     if cor in ["purple", "red", "darkorange", "orange"]:
         st.warning(f"⚠️ **Diretriz Cirúrgica:** {conduta}")
     else:
         st.success(f"✅ **Diretriz Cirúrgica:** {conduta}")
         
-    # 9. Painel Dinâmico do Centurion
+    # 9. Painel de Parâmetros Alcon Centurion
     st.markdown("### ⚙️ Programação Sugerida para Alcon Centurion")
     col1, col2 = st.columns(2)
     with col1:
