@@ -10,7 +10,7 @@ st.set_page_config(
 )
 st.title("👁️ NucleoClass - Análise Densitométrica de Catarata")
 st.subheader("Classificação Automatizada Ambulatorial (G0 a G6)")
-st.caption("Versão Ultra-Calibrada: Retângulo Constrangido para Fenda Estreita")
+st.caption("Versão Estabilizada: Geometria Adaptativa de Núcleo Recortado")
 st.markdown("---")
 
 # 2. Área de Upload da Imagem do Paciente
@@ -22,9 +22,9 @@ if arquivo is not None:
     img = cv2.imdecode(file_bytes, 1)
     altura, largura, _ = img.shape
     
-    # 4. RETÂNGULO CONSTRANGIDO VERTICAL (Filete centralizado - impede contaminação periférica)
-    ymin, ymax = int(altura * 0.40), int(altura * 0.60)  # Centralizado verticalmente (núcleo)
-    xmin, xmax = int(largura * 0.46), int(largura * 0.54) # Estreito: trava rigorosamente dentro da linha de luz
+    # 4. RECORTE ADAPTATIVO EQUILIBRADO (Alargado horizontalmente para evitar perda de zona densa deslocada)
+    ymin, ymax = int(altura * 0.45), int(altura * 0.55)  # Concentrado estritamente na linha do meio horizontal
+    xmin, xmax = int(largura * 0.40), int(largura * 0.60) # Mais largo para englobar o miolo âmbar e o feixe óptico
     
     # 5. PROCESSAMENTO DIGITAL DE SINAIS (Espaço HSV e RGB)
     img_hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
@@ -45,9 +45,9 @@ if arquivo is not None:
     # 6. Desenha o retângulo visual na imagem para conferência do médico
     img_viz = img.copy()
     cv2.rectangle(img_viz, (xmin, ymin), (xmax, ymax), (0, 255, 0), 4)
-    st.image(img_viz, channels="BGR", caption="Área de Leitura Restrita ao Núcleo da Fenda", use_container_width=True)
+    st.image(img_viz, channels="BGR", caption="Área de Leitura Corrigida (Abraçando o Miolo Âmbar)", use_container_width=True)
     
-    # 7. MOTOR DE DECISÃO INTELIGENTE ATUALIZADO (Limiares para ROI Constrangida)
+    # 7. MOTOR DE DECISÃO INTELIGENTE ATUALIZADO (Limiares para ROI Equilibrada)
     
     # REGRA DA CATARATA BRANCA (G5): Saturação de cor muito baixa (gesso leitoso) + Brilho expressivo
     if media_s < 45.0 and media_v > 115.0:
@@ -75,12 +75,12 @@ if arquivo is not None:
             cor = "green"
             conduta = "Fragmentação fácil. Baixa densidade nuclear. Parâmetros cirúrgicos conservadores de baixa energia."
             faco_param = {"Torsional (Ozil)": "20% Burst", "Faco Longitudinal": "0% Linear", "Vácuo Máximo": "350 mmHg", "Fluxo de Aspiração": "32 cc/min", "IOP Alvo": "60 mmHg"}
-        elif media_v <= 145.0:
+        elif media_v <= 135.0:
             laudo = "G2 - Grau II (Catarata Nuclear Moderada-Leve)"
             cor = "blue"
             conduta = "Densidade moderada padrão. Fragmentação mecânica fácil. Procedimento convencional estável do serviço."
             faco_param = {"Torsional (Ozil)": "40% Burst/Pulse", "Faco Longitudinal": "0-5% Linear", "Vácuo Máximo": "400 mmHg", "Fluxo de Aspiração": "35 cc/min", "IOP Alvo": "65 mmHg"}
-        elif media_v <= 190.0:
+        elif media_v <= 170.0:  # Limite ligeiramente reduzido de 180 para 170 para ajustar a ROI adaptativa
             laudo = "G3 - Grau III (Catarata Nuclear Moderada-Avançada)"
             cor = "orange"
             conduta = "Núcleo denso. Obrigatoriedade de técnicas mecânicas de fratura (Faco-Chop ou Quick Chop) para poupar energia ultrassônica total (CDE)."
