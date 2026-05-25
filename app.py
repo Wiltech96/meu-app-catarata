@@ -10,7 +10,7 @@ st.set_page_config(
 )
 st.title("👁️ NucleoClass - Análise Densitométrica de Catarata")
 st.subheader("Classificação Automatizada Ambulatorial (G0 a G6)")
-st.caption("Desenvolvido para Padronização Digital Baseada no Espaço de Cores HSV")
+st.caption("Versão Corrigida: Algoritmo HSV Multi-Filtro Adaptativo")
 st.markdown("---")
 
 # 2. Área de Upload da Imagem do Paciente
@@ -26,12 +26,12 @@ if arquivo is not None:
     ymin, ymax = int(altura * 0.35), int(altura * 0.65)  # Mais alto: cobre o núcleo de cima a baixo
     xmin, xmax = int(largura * 0.45), int(largura * 0.55) # Mais estreito: ignora zonas escuras periféricas
     
-    # 5. PROCESSAMENTO DIGITAL DE SINAIS (Espaço HSV)
+    # 5. PROCESSAMENTO DIGITAL DE SINAIS (Espaço HSV e RGB)
     # Converte a imagem para HSV para neutralizar os ajustes automáticos de brilho da câmera
     img_hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
     canal_v = img_hsv[:, :, 2]  # Canal V (Value - Luminosidade Pura de 0 a 255)
     
-    # Extrai os canais RGB originais estritamente para o cálculo da Razão Cromática
+    # Extrai os canais RGB originais para o cálculo da Razão Cromática
     canal_red = img[:, :, 2]
     canal_blue = img[:, :, 0]
     
@@ -48,46 +48,47 @@ if arquivo is not None:
     cv2.rectangle(img_viz, (xmin, ymin), (xmax, ymax), (0, 255, 0), 4)
     st.image(img_viz, channels="BGR", caption="Área de Leitura do Núcleo Cravada na Fenda", use_container_width=True)
     
-    # 7. MOTOR DE DECISÃO INTELIGENTE (Régua Baseada em HSV e Razão Cromática)
+    # 7. MOTOR DE DECISÃO INTELIGENTE ATUALIZADO (Filtro Duplo de Segurança)
     
-    # Primeiro testa o critério cromático da Catarata Rubra/Brunescente (G6)
-    if razao_vermelho_azul > 3.8 and media_v > 80.0:
-        laudo = f"G6 - Variante Catarata Rubra / Brunescente Ultra-Densa"
-        cor = "purple"
-        conduta = "Dureza máxima (rocha). Absorção cromática severa. Exige proteção endotelial máxima (Soft-Shell rígido) e parâmetros de alta energia torsional (Centurion Ozil 100% Contínuo)."
-        faco_param = {"Torsional (Ozil)": "100% Contínuo", "Faco Longitudinal": "20-30% em Pulso", "Vácuo Máximo": "450-500 mmHg", "Fluxo de Aspiração": "40-45 cc/min", "IOP Alvo": "80 mmHg"}
-    
-    # Segundo testa a saturação luminosa cortical da Catarata Branca Total (G5)
-    elif media_v >= 210.0:
-        laudo = f"G5 - Variante Catarata Branca / Total Intumescente"
+    # Primeiro testa a saturação luminosa da Catarata Branca Total (G5)
+    # Exige alto brilho V e uma razão de cores equilibrada (sem o tom marrom/amarelo forte)
+    if media_v >= 180.0 and razao_vermelho_azul < 2.2:
+        laudo = "G5 - Variante Catarata Branca / Total Intumescente"
         cor = "red"
         conduta = "Opacificação total cortical e estouro de reflexão. Alto risco de hipertensão intralenticular (Sinal da Bandeira Argentina). Realizar descompressão prévia com agulha fina antes da capsulorréxis. Usar Azul de Tripano obrigatório."
         faco_param = {"Torsional (Ozil)": "0% (Usar apenas I/A inicial)", "Faco Longitudinal": "0-10% Linear", "Vácuo Máximo": "300 mmHg", "Fluxo de Aspiração": "30 cc/min", "IOP Alvo": "55 mmHg"}
     
+    # Segundo testa o critério cromático da Catarata Rubra/Brunescente (G6)
+    elif razao_vermelho_azul > 3.2 and media_v > 65.0:
+        laudo = "G6 - Variante Catarata Rubra / Brunescente Ultra-Densa"
+        cor = "purple"
+        conduta = "Dureza máxima (rocha). Absorção cromática severa. Exige proteção endotelial máxima (Soft-Shell rígido) e parâmetros de alta energia torsional (Centurion Ozil 100% Contínuo)."
+        faco_param = {"Torsional (Ozil)": "100% Contínuo", "Faco Longitudinal": "20-30% em Pulso", "Vácuo Máximo": "450-500 mmHg", "Fluxo de Aspiração": "40-45 cc/min", "IOP Alvo": "80 mmHg"}
+    
     # Caso contrário, distribui linearmente pela escala de esclerose filtrada pelo canal V (G0 a G4)
     else:
         if media_v <= 45.0:
-            laudo = f"G0 - Cristalino Transparente / Catarata Nuclear Incipiente"
+            laudo = "G0 - Cristalino Transparente / Catarata Nuclear Incipiente"
             cor = "green"
             conduta = "Parâmetros mínimos de energia. Cristalino gelatinoso e macio. Priorizar aspiração mecânica pura."
             faco_param = {"Torsional (Ozil)": "0%", "Faco Longitudinal": "0-10% Linear", "Vácuo Máximo": "300 mmHg", "Fluxo de Aspiração": "30 cc/min", "IOP Alvo": "55 mmHg"}
         elif media_v <= 90.0:
-            laudo = f"G1 - Grau I (Catarata Nuclear Inicial)"
+            laudo = "G1 - Grau I (Catarata Nuclear Inicial)"
             cor = "green"
             conduta = "Fragmentação fácil. Baixa densidade nuclear. Parâmetros cirúrgicos conservadores de baixa energia."
             faco_param = {"Torsional (Ozil)": "20% Burst", "Faco Longitudinal": "0% Linear", "Vácuo Máximo": "350 mmHg", "Fluxo de Aspiração": "32 cc/min", "IOP Alvo": "60 mmHg"}
         elif media_v <= 135.0:
-            laudo = f"G2 - Grau II (Catarata Nuclear Moderada-Leve)"
+            laudo = "G2 - Grau II (Catarata Nuclear Moderada-Leve)"
             cor = "blue"
             conduta = "Densidade moderada padrão. Fragmentação mecânica fácil. Procedimento convencional estável do serviço."
             faco_param = {"Torsional (Ozil)": "40% Burst/Pulse", "Faco Longitudinal": "0-5% Linear", "Vácuo Máximo": "400 mmHg", "Fluxo de Aspiração": "35 cc/min", "IOP Alvo": "65 mmHg"}
-        elif media_v <= 180.0:
-            laudo = f"G3 - Grau III (Catarata Nuclear Moderada-Avançada)"
+        elif media_v < 180.0:
+            laudo = "G3 - Grau III (Catarata Nuclear Moderada-Avançada)"
             cor = "orange"
             conduta = "Núcleo denso. Obrigatoriedade de técnicas mecânicas de fratura (Faco-Chop ou Quick Chop) para poupar energia ultrassônica total (CDE)."
             faco_param = {"Torsional (Ozil)": "60% Linear", "Faco Longitudinal": "10% Mili-burst", "Vácuo Máximo": "400 mmHg", "Fluxo de Aspiração": "38 cc/min", "IOP Alvo": "70 mmHg"}
         else:
-            laudo = f"G4 - Grau IV (Catarata Nuclear Avançada / Densa Típica)"
+            laudo = "G4 - Grau IV (Catarata Nuclear Avançada / Densa Típica)"
             cor = "darkorange"
             conduta = "Cristalino altamente endurecido. Alto risco de perda endotelial e estresse zonular. Injetar viscoelástico dispersivo (Viscoat) repetidas vezes durante o procedimento."
             faco_param = {"Torsional (Ozil)": "80-100% Contínuo", "Faco Longitudinal": "15-20% Mili-burst", "Vácuo Máximo": "450 mmHg", "Fluxo de Aspiração": "40 cc/min", "IOP Alvo": "75 mmHg"}
