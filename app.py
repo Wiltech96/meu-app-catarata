@@ -34,7 +34,7 @@ if arquivo is not None:
     # Suaviza a imagem para remover granulações e ruídos digitais do celular
     roi_blur = cv2.GaussianBlur(roi_hsv, (9, 9), 0)
     
-    # TRAVA REVOLUCIONÁRIA: Define os limites exatos da cor amarela/alaranjada do núcleo da catarata
+    # DEFINE OS LIMITES EXATOS DA COR AMARELA/ALANRANJADA DO NÚCLEO DA CATARATA
     # H (Matiz): vai de 5 a 38 (cobre do marrom/laranja ao amarelo claro). S e V filtram o fundo escuro.
     limite_inferior = np.array([5, 40, 40])
     limite_superior = np.array([38, 255, 255])
@@ -85,13 +85,13 @@ if arquivo is not None:
     st.image(img_viz, channels="BGR", caption=caption_imagem, use_container_width=True)
     
     # 6. EXTRAÇÃO MULTIDIMENSIONAL DE MÉTRICAS FILTRADAS PELA NOVA GEOMETRIA
-    media_h = float(cv2.mean(roi_hsv[:, :, 0], mask=mascara_final)) # Matiz
-    media_s = float(cv2.mean(roi_hsv[:, :, 1], mask=mascara_final)) # Saturação
-    media_v = float(cv2.mean(roi_hsv[:, :, 2], mask=mascara_final)) # Luminosidade V
+    media_h = float(cv2.mean(roi_hsv[:, :, 0], mask=mascara_final)[0]) # Matiz
+    media_s = float(cv2.mean(roi_hsv[:, :, 1], mask=mascara_final)[0]) # Saturação
+    media_v = float(cv2.mean(roi_hsv[:, :, 2], mask=mascara_final)[0]) # Luminosidade V
     
     # Extração dos canais RGB originais para cálculo da razão dentro do contorno
-    media_r = float(cv2.mean(roi_bgr[:, :, 2], mask=mascara_final))
-    media_b = float(cv2.mean(roi_bgr[:, :, 0], mask=mascara_final))
+    media_r = float(cv2.mean(roi_bgr[:, :, 2], mask=mascara_final)[0])
+    media_b = float(cv2.mean(roi_bgr[:, :, 0], mask=mascara_final)[0])
     razao_vermelho_azul = media_r / (media_b + 0.001)
     
     # 7. MOTOR DE DECISÃO INTELIGENTE RECALIBRADO PARA ÁREA INTEGRAL DO NÚCLEO
@@ -101,7 +101,7 @@ if arquivo is not None:
         laudo = "G5 - Variante Catarata Branca / Total Intumescente"
         cor = "red"
         conduta = "Opacificação total cortical. Alto risco de hipertensão intralenticular (Sinal da Bandeira Argentina). Realizar descompressão prévia com agulha fina antes da capsulorréxis. Usar Azul de Tripano obrigatório."
-        faco_param = {"Torsional (Ozil)": "0% (Usar apenas I/A inicial)", "Faco Longitudinal": "0-10% Linear", "Vácsuo Máximo": "300 mmHg", "Fluxo de Aspiração": "30 cc/min", "IOP Alvo": "55 mmHg"}
+        faco_param = {"Torsional (Ozil)": "0% (Usar apenas I/A inicial)", "Faco Longitudinal": "0-10% Linear", "Vácuo Máximo": "300 mmHg", "Fluxo de Aspiração": "30 cc/min", "IOP Alvo": "55 mmHg"}
     
     # REGRA DA CATARATA RUBRA (G6): Razão de vermelho/azul alta (tom de tijolo profundo/marrom)
     elif razao_vermelho_azul > 3.2 and media_v > 60.0:
@@ -125,7 +125,7 @@ if arquivo is not None:
         elif media_v <= 150.0:
             laudo = "G2 - Grau II (Catarata Nuclear Moderada-Leve)"
             cor = "blue"
-            conduta = "Densidade moderada padrão. Fragmentação mecânica fácil. Procedimento convencional estável do serviço."
+            conduta = "Densidade moderada padrão. Fragmentação mecânica fácil. Procedimento unconventional estável do serviço."
             faco_param = {"Torsional (Ozil)": "40% Burst/Pulse", "Faco Longitudinal": "0-5% Linear", "Vácuo Máximo": "400 mmHg", "Fluxo de Aspiração": "35 cc/min", "IOP Alvo": "65 mmHg"}
         elif media_v <= 195.0:
             laudo = "G3 - Grau III (Catarata Nuclear Moderada-Avançada)"
@@ -165,4 +165,3 @@ if arquivo is not None:
         st.success(f"✅ **Diretriz Cirúrgica:** {conduta}")
         
     # 9. Painel de Parâmetros Alcon Centurion
-    st.markdown("### ⚙️ Programação Sugerida para Alcon Centurion")
