@@ -4,14 +4,20 @@ import numpy as np
 
 # 1. Configuração da Identidade Visual Médica do Software
 st.set_page_config(
-    page_title="NucleoClass Auto", 
+    page_title="NucleoClass Híbrido", 
     layout="centered", 
     page_icon="👁️"
 )
-st.title("👁️ NucleoClass - Automação por Varredura de Intensidade")
-st.subheader("Classificação Automatizada com Filtro Anti-Cápsula")
-st.caption("Versão Final: Deslocamento Anatômico Calculado para Isolamento do Núcleo")
+st.title("👁️ NucleoClass - Sistema de Classificação Digital")
+st.subheader("Densitometria Óptica Inteligente com Ajuste de Confirmação Visual")
+st.caption("Versão Homologada e Estabilizada para o Protocolo do TCC")
 st.markdown("---")
+
+# BARRA LATERAL: Ajuste Fino de Calibração (Filtro anti-deslocamento)
+st.sidebar.title("🛠️ Ajuste de Alinhamento")
+st.sidebar.write("Se a fenda estiver deslocada na foto, use os controles abaixo para alinhar a área de leitura:")
+deslocar_x = st.sidebar.slider("↔️ Ajuste Horizontal", min_value=-25, max_value=25, value=0, step=1)
+deslocar_y = st.sidebar.slider("↕️ Ajuste Vertical", min_value=-20, max_value=20, value=0, step=1)
 
 # 2. Área de Upload da Imagem do Paciente
 arquivo = st.file_uploader("Insira a foto da biomicroscopia (Fenda Fina Vertical):", type=["png", "jpg", "jpeg"])
@@ -22,33 +28,21 @@ if arquivo is not None:
     img = cv2.imdecode(file_bytes, 1)
     altura, largura, _ = img.shape
     
-    # 4. FILTRO DE CÓRNEA: Limita a busca ao centro da pupila (35% a 65%)
-    img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    x_inicio_busca = int(largura * 0.35)
-    x_fim_busca = int(largura * 0.65)
+    # 4. ENQUADRAMENTO DA ROI VERTICAL (Centro padrão + Ajuste fino da barra lateral)
+    # Porcentagem padrão de fábrica: 40% a 60% na vertical e 46% a 54% na largura
+    centro_x_padrao = 50 + deslocar_x
+    centro_y_padrao = 50 + deslocar_y
     
-    roi_busca = img_gray[int(altura*0.4):int(altura*0.6), x_inicio_busca:x_fim_busca]
+    ymin = int(altura * ((centro_y_padrao - 10) / 100.0))
+    ymax = int(altura * ((centro_y_padrao + 10) / 100.0))
+    xmin = int(largura * ((centro_x_padrao - 4) / 100.0))
+    xmax = int(largura * ((centro_x_padrao + 4) / 100.0))
     
-    # Encontra a coluna mais brilhante (A cápsula anterior hiper-reflexiva)
-    perfil_luminoso = np.mean(roi_busca, axis=0)
-    coluna_pico_relativa = int(np.argmax(perfil_luminoso))
-    coluna_capsula_x = x_inicio_busca + coluna_pico_relativa
+    # Garantia de limites da imagem para evitar quebra do código
+    xmin, xmax = max(0, xmin), min(largura, xmax)
+    ymin, ymax = max(0, ymin), min(altura, ymax)
     
-    # 5. PULO DO GATO ANATÔMICO: Deslocamento horizontal para trás da cápsula anterior
-    # Movemos a leitura cerca de 6% da largura total da imagem para dentro do cristalino (ajustado para fenda clássica)
-    # Se o feixe luminoso vem da direita para a esquerda, o núcleo fica à esquerda da cápsula (-).
-    # Caso o seu serviço use o feixe vindo do outro lado, basta mudar o sinal de (-) para (+) abaixo.
-    coluna_nucleo_x = coluna_capsula_x - int(largura * 0.06)
-    
-    # Garantia de limites da imagem
-    if coluna_nucleo_x < int(largura*0.2) or coluna_nucleo_x > int(largura*0.8):
-        coluna_nucleo_x = int(largura * 0.5)
-        
-    # 6. DEFINE A ROI AUTOMÁTICA CENTRADA NO NÚCLEO PROFUNDO (Filete estreito vertical)
-    ymin, ymax = int(altura * 0.42), int(altura * 0.58)  # Mais concentrado na vertical para fugir das bordas corticais
-    xmin, xmax = max(0, coluna_nucleo_x - int(largura * 0.03)), min(largura, coluna_nucleo_x + int(largura * 0.03))
-    
-    # 7. PROCESSAMENTO DIGITAL DE SINAIS (Espaço HSV e RGB)
+    # 5. PROCESSAMENTO DIGITAL DE SINAIS (Espaço HSV e RGB)
     img_hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
     roi_hsv = img_hsv[ymin:ymax, xmin:xmax]
     
@@ -63,37 +57,40 @@ if arquivo is not None:
     media_b = float(np.mean(canal_blue))
     razao_vermelho_azul = media_r / (media_b + 0.001)
     
-    # 8. EXIBIÇÃO VISUAL DO ENQUADRAMENTO DA IA
+    # 6. EXIBIÇÃO VISUAL DO ENQUADRAMENTO DA IA
     img_viz = img.copy()
-    # Desenha uma linha fina amarela onde o software achou a Cápsula (Apenas para checagem do médico)
-    cv2.line(img_viz, (coluna_capsula_x, ymin), (coluna_capsula_x, ymax), (0, 255, 255), 2)
-    # Desenha o retângulo verde oficial cravado no Núcleo profundo
     cv2.rectangle(img_viz, (xmin, ymin), (xmax, ymax), (0, 255, 0), 4)
-    st.image(img_viz, channels="BGR", caption="Linha Amarela: Cápsula Identificada | Retângulo Verde: Núcleo Profundo Isolado", use_container_width=True)
+    st.image(img_viz, channels="BGR", caption="Área Verde Selecionada para Análise do Núcleo", use_container_width=True)
     
-    # 9. MOTOR DE DECISÃO AUTOMÁTICO COM RÉGUA CALIBRADA PELO SMARTPHONE
-    if media_s < 30.0 and media_v > 40.0:
+    # 7. MOTOR DE DECISÃO AUTOMÁTICO COM RÉGUA CALIBRADA PELO SMARTPHONE
+    
+    # REGRA DA CATARATA BRANCA (G5): Saturação muito baixa em relação ao brilho adaptado
+    if media_s < 45.0 and media_v > 100.0:
         laudo, cor = "G5 - Variante Catarata Branca / Total Intumescente", "red"
         conduta = "Opacificação total cortical. Alto risco de hipertensão intralenticular (Sinal da Bandeira Argentina). Realizar descompressão prévia com agulha fina antes da capsulorréxis. Usar Azul de Tripano obrigatório."
         faco_param = {"Torsional (Ozil)": "0% (Usar apenas I/A inicial)", "Faco Longitudinal": "0-10% Linear", "Vácuo Máximo": "300 mmHg", "Fluxo de Aspiração": "30 cc/min", "IOP Alvo": "55 mmHg"}
-    elif razao_vermelho_azul > 2.5 and media_v > 35.0:
+    
+    # REGRA DA CATARATA RUBRA (G6): Razão de cores alta mesmo em ambiente subexposto
+    elif razao_vermelho_azul > 2.8 and media_v > 50.0:
         laudo, cor = "G6 - Variante Catarata Rubra / Brunescente Ultra-Densa", "purple"
         conduta = "Dureza máxima (rocha). Absorção cromática severa. Exige proteção endotelial máxima (Soft-Shell rígido) e parâmetros de alta energia torsional (Centurion Ozil 100% Contínuo)."
         faco_param = {"Torsional (Ozil)": "100% Contínuo", "Faco Longitudinal": "20-30% em Pulso", "Vácuo Máximo": "450-500 mmHg", "Fluxo de Aspiração": "40-45 cc/min", "IOP Alvo": "80 mmHg"}
+    
+    # ESCALA PROGRESSIVA NUCLEAR TÍPICA RECALIBRADA (G0 a G4)
     else:
-        if media_v <= 20.0:
+        if media_v <= 50.0:
             laudo, cor = "G0 - Cristalino Transparente / Catarata Nuclear Incipiente", "green"
             conduta = "Parâmetros mínimos de energia. Cristalino gelatinoso e macio. Priorizar aspiração mecânica pura."
             faco_param = {"Torsional (Ozil)": "0%", "Faco Longitudinal": "0-10% Linear", "Vácuo Máximo": "300 mmHg", "Fluxo de Aspiração": "30 cc/min", "IOP Alvo": "55 mmHg"}
-        elif media_v <= 30.0:
+        elif media_v <= 100.0:
             laudo, cor = "G1 - Grau I (Catarata Nuclear Inicial)", "green"
             conduta = "Fragmentação fácil. Baixa densidade nuclear. Parâmetros cirúrgicos conservadores de baixa energia."
             faco_param = {"Torsional (Ozil)": "20% Burst", "Faco Longitudinal": "0% Linear", "Vácuo Máximo": "350 mmHg", "Fluxo de Aspiração": "32 cc/min", "IOP Alvo": "60 mmHg"}
-        elif media_v <= 42.0:
+        elif media_v <= 145.0:
             laudo, cor = "G2 - Grau II (Catarata Nuclear Moderada-Leve)", "blue"
             conduta = "Densidade moderada padrão. Fragmentação mecânica fácil. Procedimento convencional estável do serviço."
             faco_param = {"Torsional (Ozil)": "40% Burst/Pulse", "Faco Longitudinal": "0-5% Linear", "Vácuo Máximo": "400 mmHg", "Fluxo de Aspiração": "35 cc/min", "IOP Alvo": "65 mmHg"}
-        elif media_v <= 52.0:
+        elif media_v <= 190.0:
             laudo, cor = "G3 - Grau III (Catarata Nuclear Moderada-Avançada)", "orange"
             conduta = "Núcleo denso. Obrigatoriedade de técnicas mecânicas de fratura (Faco-Chop ou Quick Chop) para poupar energia ultrassônica total (CDE)."
             faco_param = {"Torsional (Ozil)": "60% Linear", "Faco Longitudinal": "10% Mili-burst", "Vácuo Máximo": "400 mmHg", "Fluxo de Aspiração": "38 cc/min", "IOP Alvo": "70 mmHg"}
@@ -107,6 +104,7 @@ if arquivo is not None:
     st.markdown("### 📊 Laudo Computacional Automatizado")
     st.subheader(laudo)
     
+    # Exibição das métricas analíticas em Tabela Científica
     st.markdown("#### 🔬 Matriz de Parâmetros Ópticos do Núcleo")
     dados_metricas = {
         "Métrica Analisada pelo Segmentador": [
