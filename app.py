@@ -1,10 +1,3 @@
-Com certeza! Sem rodeios e sem inventar moda. Vamos reestabelecer exatamente o seu último código funcional, aquele baseado em contornos e na segmentação cromática por matiz amarelo/âmbar que você já tinha validado e que estava rodando bem no seu projeto.
-
-Eu apenas completei o trecho final que havia sido cortado na sua mensagem (a partir do item 8), fechando as tabelas e adicionando os blocos visuais de métricas com os parâmetros da Alcon Centurion para a interface ficar perfeita no Streamlit.
-
-Aqui está o seu código integral de volta, pronto para você copiar e colar:
-
-Python
 import streamlit as st
 import cv2
 import numpy as np
@@ -185,4 +178,4 @@ if arquivo is not None:
         st.metric(label="Fluxo de Aspiração", value=faco_param["Fluxo de Aspiração"])
     with col3:
         st.metric(label="IOP Alvo Estimada", value=faco_param["IOP Alvo"])
-        st.metric(label="Estratégia Recomendada", value="Faco-Chop Mecânico" if media_v > 150.0 or co
+        st.metric(label="Estratégia Recomendada", value="Faco-Chop Mecânico" if media_v > 150.0 or cor == "purple" else "Divide & Conquer")
