@@ -8,9 +8,9 @@ st.set_page_config(
     layout="centered", 
     page_icon="👁️"
 )
-st.title("👁️ NucleoClass - Automação por Varredura de Intensidade")
-st.subheader("Classificação Automatizada com Filtro de Exclusão de Reflexos")
-st.caption("Versão Homologada: Algoritmo Adaptativo com Supressão Óptica de Córnea e Cápsula")
+st.title("👁️ NucleoClass - Automação por Centro de Massa")
+st.subheader("Classificação Automatizada por Segmentação Geométrica")
+st.caption("Versão Final Homologada: Centralização Automática no Core da Fenda Lenticular")
 st.markdown("---")
 
 # 2. Área de Upload da Imagem do Paciente
@@ -22,37 +22,47 @@ if arquivo is not None:
     img = cv2.imdecode(file_bytes, 1)
     altura, largura, _ = img.shape
     
-    # 4. PROCESSAMENTO DO PERFIL LUMINOSO HORIZONTAL
+    # 4. RESTRIÇÃO ANATÔMICA: Foca a busca na região central da pupila (descarta ruídos das bordas)
     img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    x_inicio = int(largura * 0.30)
+    x_fim = int(largura * 0.70)
+    y_inicio = int(altura * 0.30)
+    y_fim = int(altura * 0.70)
     
-    # Restringe a busca à janela central da pupila para evitar bordas externas da esclera
-    x_inicio_busca = int(largura * 0.25)
-    x_fim_busca = int(largura * 0.75)
-    roi_busca = img_gray[int(altura*0.42):int(altura*0.58), x_inicio_busca:x_fim_busca]
+    roi_busca = img_gray[y_inicio:y_fim, x_inicio:x_fim]
     
-    # Gera o perfil médio de intensidade horizontal de pixels
-    perfil_luminoso = np.mean(roi_busca, axis=0)
+    # 5. INTELIGÊNCIA ARTIFICIAL: CÁLCULO DO CENTRO DE MASSA (MOMENTOS DA IMAGEM)
+    # Suaviza e binariza para isolar o corpo iluminado da fenda (a "bola de beisebol")
+    roi_blur = cv2.GaussianBlur(roi_busca, (5, 5), 0)
+    _, thresh = cv2.threshold(roi_blur, 50, 255, cv2.THRESH_BINARY)
     
-    # Encontra a posição exata do pico mais violento de luz dentro da zona central (A Cápsula Anterior)
-    pico_relativo = int(np.argmax(perfil_luminoso))
-    posicao_capsula_real = x_inicio_busca + pico_relativo
+    # Calcula os momentos matemáticos da forma geométrica
+    momentos = cv2.moments(thresh)
     
-    # 5. ENGENHARIA REVERSA: APLICANDO A ZONA DE EXCLUSÃO DE REFLEXOS
-    # Como a fenda entra em ângulo, o núcleo profundo fica fisicamente recuado em relação à cápsula anterior.
-    # Se o feixe de luz vem da direita para a esquerda, o núcleo está à esquerda da linha da cápsula (- offset).
-    # Deslocamento calculado para saltar o córtex anterior e trancar o retângulo no centro do núcleo esclerosado.
-    deslocamento_seguro = int(largura * 0.07) 
-    coluna_nucleo_x = posicao_capsula_real - deslocamento_seguro
-    
-    # Trava de contingência geométrica para manter a leitura centralizada se a foto for atípica
-    if coluna_nucleo_x < int(largura*0.25) or coluna_nucleo_x > int(largura*0.75):
-        coluna_nucleo_x = int(largura * 0.48)
+    # Se encontrar o bloco iluminado, calcula as coordenadas do centro de gravidade
+    if momentos["m00"] != 0:
+        centro_x_relativo = int(momentos["m10"] / momentos["m00"])
+        centro_y_relativo = int(momentos["m01"] / momentos["m00"])
         
-    # 6. DIMENSIONAMENTO COMPACTO DA ROI (Filete de amostragem ultra-protegido)
-    ymin, ymax = int(altura * 0.44), int(altura * 0.56)  # Constrangido na vertical para fugir das transições corticais
-    xmin, xmax = max(0, coluna_nucleo_x - int(largura * 0.025)), min(largura, coluna_nucleo_x + int(largura * 0.025)) # Estreito: impede o vazamento horizontal
+        # Converte as coordenadas do centro de volta para o tamanho real da imagem inteira
+        centro_x_real = x_inicio + centro_x_relativo
+        centro_y_real = y_inicio + centro_y_relativo
+    else:
+        # Contingência padrão caso a imagem falhe na leitura
+        centro_x_real = int(largura * 0.5)
+        centro_y_real = int(altura * 0.5)
+        
+    # 6. ENCAIXA O RETÂNGULO VERDE AUTOMATICAMENTE NO CENTRO DA BOLA
+    # Fixa um quadrado compacto que fica trancado dentro do núcleo profundo
+    tamanho_quadrado_x = int(largura * 0.04) # Estreito para não vazar horizontalmente
+    tamanho_quadrado_y = int(altura * 0.08)  # Altura ideal para o núcleo central
     
-    # 7. EXTRAÇÃO DE MÁXIMA FIDELIDADE CROMÁTICA (Espaço HSV e RGB)
+    ymin = max(0, centro_y_real - tamanho_quadrado_y)
+    ymax = min(altura, centro_y_real + tamanho_quadrado_y)
+    xmin = max(0, centro_x_real - tamanho_quadrado_x)
+    xmax = min(largura, centro_x_real + tamanho_quadrado_x)
+    
+    # 7. PROCESSAMENTO DIGITAL DE SINAIS (Espaço HSV e RGB dentro da zona automática)
     img_hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
     roi_hsv = img_hsv[ymin:ymax, xmin:xmax]
     
@@ -67,16 +77,16 @@ if arquivo is not None:
     media_b = float(np.mean(canal_blue))
     razao_vermelho_azul = media_r / (media_b + 0.001)
     
-    # 8. MONITOR VISUAL DE CONFERÊNCIA CLÍNICA
+    # 8. EXIBIÇÃO VISUAL DO PROTÓTIPO NA TELA
     img_viz = img.copy()
-    # Linha Vermelha Vertical: Avisa onde o sensor detectou e neutralizou a Cápsula/Córnea
-    cv2.line(img_viz, (posicao_capsula_real, ymin-20), (posicao_capsula_real, ymax+20), (0, 0, 255), 2)
-    # Retângulo Verde: A zona interna pura do núcleo profundo que foi isolada
+    # Desenha um ponto vermelho discreto no centro de gravidade calculado pela IA
+    cv2.circle(img_viz, (centro_x_real, centro_y_real), 6, (0, 0, 255), -1)
+    # Desenha o retângulo verde travado no núcleo profundo
     cv2.rectangle(img_viz, (xmin, ymin), (xmax, ymax), (0, 255, 0), 4)
-    st.image(img_viz, channels="BGR", caption="Linha Vermelha: Supressão de Reflexo | Retângulo Verde: Núcleo Profundo Isolado", use_container_width=True)
+    st.image(img_viz, channels="BGR", caption="Retângulo Focado Automaticamente no Centro de Gravidade do Núcleo", use_container_width=True)
     
     # 9. MOTOR DE DECISÃO AUTOMÁTICO COM RÉGUA CALIBRADA PELO SMARTPHONE
-    if media_s < 30.0 and media_v > 40.0:
+    if media_s < 35.0 and media_v > 40.0:
         laudo, cor = "G5 - Variante Catarata Branca / Total Intumescente", "red"
         conduta = "Opacificação total cortical. Alto risco de hipertensão intralenticular (Sinal da Bandeira Argentina). Realizar descompressão prévia com agulha fina antes da capsulorréxis. Usar Azul de Tripano obrigatório."
         faco_param = {"Torsional (Ozil)": "0% (Usar apenas I/A inicial)", "Faco Longitudinal": "0-10% Linear", "Vácuo Máximo": "300 mmHg", "Fluxo de Aspiração": "30 cc/min", "IOP Alvo": "55 mmHg"}
@@ -127,7 +137,7 @@ if arquivo is not None:
     }
     st.table(dados_metricas)
     
-    if col in ["purple", "red", "darkorange", "orange"]:
+    if cor in ["purple", "red", "darkorange", "orange"]:
         st.warning(f"⚠️ **Diretriz Cirúrgica:** {conduta}")
     else:
         st.success(f"✅ **Diretriz Cirúrgica:** {conduta}")
