@@ -9,8 +9,8 @@ st.set_page_config(
     page_icon="👁️"
 )
 st.title("👁️ NucleoClass - Automação por Varredura de Intensidade")
-st.subheader("Classificação Automatizada com Filtro de Córnea")
-st.caption("Versão Final Homologada: Restrição Geométrica Central para Isolamento do Núcleo")
+st.subheader("Classificação Automatizada com Filtro Anti-Cápsula")
+st.caption("Versão Final: Deslocamento Anatômico Calculado para Isolamento do Núcleo")
 st.markdown("---")
 
 # 2. Área de Upload da Imagem do Paciente
@@ -22,28 +22,33 @@ if arquivo is not None:
     img = cv2.imdecode(file_bytes, 1)
     altura, largura, _ = img.shape
     
-    # 4. FILTRO DE CÓRNEA: Converte para cinza e restringe a busca estritamente ao centro da pupila
+    # 4. FILTRO DE CÓRNEA: Limita a busca ao centro da pupila (35% a 65%)
     img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    
-    # Define os limites horizontais da zona central (descarta 35% da esquerda e 35% da direita)
     x_inicio_busca = int(largura * 0.35)
     x_fim_busca = int(largura * 0.65)
     
-    # Recorta a faixa central horizontal para buscar a fenda do cristalino
     roi_busca = img_gray[int(altura*0.4):int(altura*0.6), x_inicio_busca:x_fim_busca]
     
-    # Calcula a coluna mais brilhante APENAS dentro da zona central restrita
+    # Encontra a coluna mais brilhante (A cápsula anterior hiper-reflexiva)
     perfil_luminoso = np.mean(roi_busca, axis=0)
     coluna_pico_relativa = int(np.argmax(perfil_luminoso))
+    coluna_capsula_x = x_inicio_busca + coluna_pico_relativa
     
-    # Converte a coordenada relativa de volta para a coordenada real da imagem inteira
-    coluna_pico_x = x_inicio_busca + coluna_pico_relativa
+    # 5. PULO DO GATO ANATÔMICO: Deslocamento horizontal para trás da cápsula anterior
+    # Movemos a leitura cerca de 6% da largura total da imagem para dentro do cristalino (ajustado para fenda clássica)
+    # Se o feixe luminoso vem da direita para a esquerda, o núcleo fica à esquerda da cápsula (-).
+    # Caso o seu serviço use o feixe vindo do outro lado, basta mudar o sinal de (-) para (+) abaixo.
+    coluna_nucleo_x = coluna_capsula_x - int(largura * 0.06)
     
-    # 5. DEFINE A ROI AUTOMÁTICA CENTRADA NO NÚCLEO DA FENDA (Filete estreito vertical)
-    ymin, ymax = int(altura * 0.40), int(altura * 0.60)
-    xmin, xmax = max(0, coluna_pico_x - int(largura * 0.04)), min(largura, coluna_pico_x + int(largura * 0.04))
+    # Garantia de limites da imagem
+    if coluna_nucleo_x < int(largura*0.2) or coluna_nucleo_x > int(largura*0.8):
+        coluna_nucleo_x = int(largura * 0.5)
+        
+    # 6. DEFINE A ROI AUTOMÁTICA CENTRADA NO NÚCLEO PROFUNDO (Filete estreito vertical)
+    ymin, ymax = int(altura * 0.42), int(altura * 0.58)  # Mais concentrado na vertical para fugir das bordas corticais
+    xmin, xmax = max(0, coluna_nucleo_x - int(largura * 0.03)), min(largura, coluna_nucleo_x + int(largura * 0.03))
     
-    # 6. PROCESSAMENTO DIGITAL DE SINAIS (Espaço HSV e RGB)
+    # 7. PROCESSAMENTO DIGITAL DE SINAIS (Espaço HSV e RGB)
     img_hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
     roi_hsv = img_hsv[ymin:ymax, xmin:xmax]
     
@@ -58,26 +63,23 @@ if arquivo is not None:
     media_b = float(np.mean(canal_blue))
     razao_vermelho_azul = media_r / (media_b + 0.001)
     
-    # 7. EXIBIÇÃO VISUAL DO ENQUADRAMENTO DA IA
+    # 8. EXIBIÇÃO VISUAL DO ENQUADRAMENTO DA IA
     img_viz = img.copy()
+    # Desenha uma linha fina amarela onde o software achou a Cápsula (Apenas para checagem do médico)
+    cv2.line(img_viz, (coluna_capsula_x, ymin), (coluna_capsula_x, ymax), (0, 255, 255), 2)
+    # Desenha o retângulo verde oficial cravado no Núcleo profundo
     cv2.rectangle(img_viz, (xmin, ymin), (xmax, ymax), (0, 255, 0), 4)
-    st.image(img_viz, channels="BGR", caption="Retângulo Travado no Cristalino Central (Filtro Anti-Córnea Ativo)", use_container_width=True)
+    st.image(img_viz, channels="BGR", caption="Linha Amarela: Cápsula Identificada | Retângulo Verde: Núcleo Profundo Isolado", use_container_width=True)
     
-    # 8. MOTOR DE DECISÃO AUTOMÁTICO COM RÉGUA CALIBRADA PELO SMARTPHONE
-    
-    # REGRA DA CATARATA BRANCA (G5)
+    # 9. MOTOR DE DECISÃO AUTOMÁTICO COM RÉGUA CALIBRADA PELO SMARTPHONE
     if media_s < 30.0 and media_v > 40.0:
         laudo, cor = "G5 - Variante Catarata Branca / Total Intumescente", "red"
         conduta = "Opacificação total cortical. Alto risco de hipertensão intralenticular (Sinal da Bandeira Argentina). Realizar descompressão prévia com agulha fina antes da capsulorréxis. Usar Azul de Tripano obrigatório."
         faco_param = {"Torsional (Ozil)": "0% (Usar apenas I/A inicial)", "Faco Longitudinal": "0-10% Linear", "Vácuo Máximo": "300 mmHg", "Fluxo de Aspiração": "30 cc/min", "IOP Alvo": "55 mmHg"}
-    
-    # REGRA DA CATARATA RUBRA (G6)
     elif razao_vermelho_azul > 2.5 and media_v > 35.0:
         laudo, cor = "G6 - Variante Catarata Rubra / Brunescente Ultra-Densa", "purple"
         conduta = "Dureza máxima (rocha). Absorção cromática severa. Exige proteção endotelial máxima (Soft-Shell rígido) e parâmetros de alta energia torsional (Centurion Ozil 100% Contínuo)."
         faco_param = {"Torsional (Ozil)": "100% Contínuo", "Faco Longitudinal": "20-30% em Pulso", "Vácuo Máximo": "450-500 mmHg", "Fluxo de Aspiração": "40-45 cc/min", "IOP Alvo": "80 mmHg"}
-    
-    # ESCALA PROGRESSIVA NUCLEAR TÍPICA RECALIBRADA (G0 a G4)
     else:
         if media_v <= 20.0:
             laudo, cor = "G0 - Cristalino Transparente / Catarata Nuclear Incipiente", "green"
@@ -100,12 +102,11 @@ if arquivo is not None:
             conduta = "Cristalino altamente endurecido. Alto risco de perda endotelial e estresse zonular. Injetar viscoelástico dispersivo (Viscoat) repetidas vezes durante o procedimento."
             faco_param = {"Torsional (Ozil)": "80-100% Contínuo", "Faco Longitudinal": "15-20% Mili-burst", "Vácuo Máximo": "450 mmHg", "Fluxo de Aspiração": "40 cc/min", "IOP Alvo": "75 mmHg"}
 
-    # 9. Entrega do Laudo e Métricas na Tela
+    # 10. Entrega do Laudo e Métricas na Tela
     st.markdown("---")
     st.markdown("### 📊 Laudo Computacional Automatizado")
     st.subheader(laudo)
     
-    # Exibição das métricas analíticas em Tabela Científica
     st.markdown("#### 🔬 Matriz de Parâmetros Ópticos do Núcleo")
     dados_metricas = {
         "Métrica Analisada pelo Segmentador": [
@@ -126,7 +127,7 @@ if arquivo is not None:
     else:
         st.success(f"✅ **Diretriz Cirúrgica:** {conduta}")
         
-    # 10. Painel de Parâmetros Alcon Centurion
+    # 11. Painel de Parâmetros Alcon Centurion
     st.markdown("### ⚙️ Programação Sugerida para Alcon Centurion")
     col1, col2 = st.columns(2)
     with col1:
