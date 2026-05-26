@@ -9,8 +9,8 @@ st.set_page_config(
     page_icon="👁️"
 )
 st.title("👁️ Novo Sistema Digital Automatizado de Classificação de Catarata")
-st.subheader("Classificação Inteligente por Centróide Dinâmico do Núcleo")
-st.caption("Versão Premium: Localização de ROI Autoadaptativa por Perfil de Intensidade (HSV)")
+st.subheader("Classificação Inteligente por Segmentação de Contorno do Núcleo")
+st.caption("Versão Final: Rastreamento Anatômico Intercapsular (Imune a Enquadramento)")
 st.markdown("---")
 
 # 2. Área de Upload da Imagem do Paciente
@@ -22,50 +22,74 @@ if arquivo is not None:
     img = cv2.imdecode(file_bytes, 1)
     altura, largura, _ = img.shape
     
-    # 4. ALGORITMO DE LOCALIZAÇÃO AUTOMÁTICA DO MIOLO (DETERMINAÇÃO DA ROI INTELIGENTE)
-    # Convertemos para escala de cinza padrão para analisar a topografia do brilho
+    # 4. ALGORITMO INTERCAPSULAR (Separação Córnea/Cristalino e Descarte do Fundo Preto)
+    # Converte para tons de cinza para mapear a energia luminosa
     img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     
-    # Suavização profunda para eliminar reflexos pontuais isolados (glare) da córnea
-    blur_localizador = cv2.GaussianBlur(img_gray, (21, 21), 0)
+    # Suavização para remover o ruído digital (noise) do sensor do celular
+    blur = cv2.GaussianBlur(img_gray, (15, 15), 0)
     
-    # Projeta o perfil de intensidade horizontal médio (soma o brilho de todas as colunas)
-    perfil_horizontal = np.mean(blur_localizador[int(altura*0.3):int(altura*0.7), :], axis=0)
+    # Corta o "preto" em volta gerando uma máscara binarizada automática (Método de Otsu)
+    # Isola tudo o que emite luz na fenda óptica
+    _, mascara_luz = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     
-    # Encontra o ponto de maior brilho na metade central da imagem (onde estatisticamente fica o cristalino)
-    margem_busca = int(largura * 0.25)
-    zona_busca = perfil_horizontal[margem_busca:-margem_busca]
+    # Encontra os contornos de luz na imagem
+    contornos, _ = cv2.findContours(mascara_luz, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     
-    # O pico do gráfico nos dá a coordenada X exata do coração do cristalino
-    centro_x = int(np.argmax(zona_busca) + margem_busca)
-    centro_y = int(altura * 0.5) # Fixado na linha equatorial do olho
+    # Filtra contornos por tamanho para evitar reflexos espúrios
+    contornos_validos = [c for c in contornos if cv2.contourArea(c) > 2000]
     
-    # Define o tamanho do "miolo" rígido de análise (ex: quadrado de 60x60 pixels no centro do núcleo)
-    tamanho_miolo = int(min(largura, altura) * 0.08) # Adaptativo ao tamanho/resolução da foto
+    # Inicialização das coordenadas de segurança caso o rastreador falhe
+    centro_x = int(largura * 0.5)
+    centro_y = int(altura * 0.5)
+    tamanho_roi = int(min(largura, altura) * 0.08)
     
-    ymin, ymax = centro_y - tamanho_miolo, centro_y + tamanho_miolo
-    xmin, xmax = centro_x - tamanho_miolo, centro_x + tamanho_miolo
+    caption_imagem = "Modo de Segurança: Padrão Geométrico Aplicado"
+    img_viz = img.copy()
+
+    if len(contornos_validos) >= 1:
+        # Ordena os blocos de luz da direita para a esquerda (coordenada X do contorno)
+        # O bloco mais à direita na fenda é o cristalino (a córnea fica à esquerda)
+        contornos_ordenados = sorted(contornos_validos, key=lambda c: cv2.boundingRect(c)[0], reverse=True)
+        
+        # Seleciona o contorno anatômico do cristalino
+        cristalino_contorno = contornos_ordenados[0]
+        x, y, w, h = cv2.boundingRect(cristalino_contorno)
+        
+        # Define as cápsulas anterior e posterior com base nos limites laterais do bloco
+        capsula_anterior_x = x
+        capsula_posterior_x = x + w
+        
+        # O miolo do núcleo fica exatamente no centro físico entre as duas cápsulas
+        centro_x = int((capsula_anterior_x + capsula_posterior_x) / 2)
+        centro_y = int(y + (h / 2))
+        
+        # Garante que a área de análise fique restrita ao interior do núcleo
+        tamanho_roi = int(w * 0.3)  # Analisa os 30% centrais do bloco do cristalino
+        
+        # Desenha a linha anatômica do cristalino na tela do médico
+        cv2.drawContours(img_viz, [cristalino_contorno], -1, (0, 255, 0), 3)
+        # Desenha a mira central no miolo profundo
+        cv2.circle(img_viz, (centro_x, centro_y), 8, (255, 0, 0), -1)
+        caption_imagem = "Cristalino Isoloado do Fundo Preto. Mira Fixada entre as Cápsulas."
+
+    # Define os limites finais de corte da ROI dinâmica
+    ymin, ymax = max(0, centro_y - tamanho_roi), min(altura, centro_y + tamanho_roi)
+    xmin, xmax = max(0, centro_x - tamanho_roi), min(largura, centro_x + tamanho_roi)
     
-    # Corta a ROI perfeitamente centralizada no miolo real do paciente
-    roi_bgr = img[ymin:ymax, xmin:xmax]
+    # Desenha o quadrado da ROI na imagem de exibição
+    cv2.rectangle(img_viz, (xmin, ymin), (xmax, ymax), (0, 255, 255), 4)
+    st.image(img_viz, channels="BGR", caption=caption_imagem, use_container_width=True)
     
-    # 5. PROCESSAMENTO AVANÇADO SÓ NO MIOLO DETECTADO (HSV)
+    # 5. PROCESSAMENTO AVANÇADO DO MIOLO ISOLADO (HSV)
     img_hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
     roi_hsv = img_hsv[ymin:ymax, xmin:xmax]
-    
-    # 6. Desenha a marcação de precisão na tela para o médico conferir
-    img_viz = img.copy()
-    # Desenha um círculo de mira azul no centro exato do miolo encontrado
-    cv2.circle(img_viz, (centro_x, centro_y), 10, (255, 0, 0), -1)
-    # Desenha a caixa da ROI em verde ao redor do miolo
-    cv2.rectangle(img_viz, (xmin, ymin), (xmax, ymax), (0, 255, 0), 4)
-    
-    st.image(img_viz, channels="BGR", caption="Mira Computacional Fixada no Miolo Profundo do Núcleo", use_container_width=True)
+    roi_bgr = img[ymin:ymax, xmin:xmax]
     
     # 6. EXTRAÇÃO MULTIDIMENSIONAL DE MÉTRICAS NO MIOLO
     media_h = float(np.mean(roi_hsv[:, :, 0])) # Matiz
     media_s = float(np.mean(roi_hsv[:, :, 1])) # Saturação
-    media_v = float(np.mean(roi_hsv[:, :, 2])) # Luminosidade V (O nosso cinza blindado)
+    media_v = float(np.mean(roi_hsv[:, :, 2])) # Luminosidade V (O nosso cinza estável)
     
     # Extração dos canais RGB originais para cálculo da razão dentro do miolo
     media_r = float(np.mean(roi_bgr[:, :, 2]))
@@ -90,7 +114,7 @@ if arquivo is not None:
     
     # ESCALA PROGRESSIVA NUCLEAR TÍPICA (G0 a G4) - Baseada no Brilho V concentrado do miolo real
     else:
-        if media_v <= 55.0: # Pequeno ajuste fino no limiar inferior do miolo puro
+        if media_v <= 55.0:
             laudo = "G0 - Cristalino Transparente / Catarata Nuclear Incipiente"
             cor = "green"
             conduta = "Parâmetros mínimos de energia. Cristalino gelatinoso e macio. Priorizar aspiração mecânica pura ou modo I/A."
