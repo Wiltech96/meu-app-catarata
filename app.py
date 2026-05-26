@@ -10,7 +10,7 @@ st.set_page_config(
 )
 st.title("👁️ NucleoClass - Análise Densitométrica de Catarata")
 st.subheader("Classificação Automatizada Ambulatorial (G0 a G6)")
-st.caption("Versão Final Homologada: Fusão por Centro de Massa e Matriz Multidimensional")
+st.caption("Versão Homologada: Reprodutibilidade Espacial por Amostragem de ROI Expandida")
 st.markdown("---")
 
 # 2. Área de Upload da Imagem do Paciente
@@ -44,24 +44,23 @@ if arquivo is not None:
         centro_x_real = int(largura * 0.5)
         centro_y_real = int(altura * 0.5)
         
-    # 6. DIMENSIONAMENTO DA ROI (Filete centralizado com o mesmo tamanho estável do original)
-    # Garante que o retângulo fique trancado no núcleo sem sofrer contaminação periférica
-    tamanho_x = int(largura * 0.04)  # Equivalente a xmin/xmax estrito do original
-    tamanho_y = int(altura * 0.10)  # Equivalente a ymin/ymax estrito do original
+    # 6. DIMENSIONAMENTO DA ROI EXPANDIDA REPRODUTÍVEL
+    # Expandido de forma calculada para diluir artefatos de reflexos pontuais e estabilizar a amostragem
+    tamanho_x = int(largura * 0.08)  # Alargado para absorver a fenda total sem vazar para a esclera
+    tamanho_y = int(altura * 0.15)  # Alongado para cobrir o miolo vertical do núcleo completo
     
     ymin, ymax = max(0, centro_y_real - tamanho_y), min(altura, centro_y_real + tamanho_y)
     xmin, xmax = max(0, centro_x_real - tamanho_x), min(largura, centro_x_real + tamanho_x)
     
-    # 7. PROCESSAMENTO DIGITAL DE SINAIS (Lógica de Extração do Código Estável)
+    # 7. PROCESSAMENTO DIGITAL DE SINAIS (Lógica de Extração e Pesos Originais)
     img_hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
     roi_hsv = img_hsv[ymin:ymax, xmin:xmax]
     
-    # Extração das médias dos canais HSV dentro do retângulo posicionado pelo Centro de Massa
-    media_h = float(np.mean(roi_hsv[:, :, 0])) # Matiz (Cor Pura)
-    media_s = float(np.mean(roi_hsv[:, :, 1])) # Saturação (Vivacidade da cor)
+    media_h = float(np.mean(roi_hsv[:, :, 0])) # Matiz
+    media_s = float(np.mean(roi_hsv[:, :, 1])) # Saturação
     media_v = float(np.mean(roi_hsv[:, :, 2])) # Luminosidade/Brilho Puro (Canal V)
     
-    # Extração dos canais RGB originais na ROI para o cálculo da Luminância e Razão
+    # Extração dos canais RGB originais na ROI Expandida
     canal_red = img[ymin:ymax, xmin:xmax, 2]
     canal_green = img[ymin:ymax, xmin:xmax, 1]
     canal_blue = img[ymin:ymax, xmin:xmax, 0]
@@ -78,11 +77,10 @@ if arquivo is not None:
     
     # 8. EXIBIÇÃO VISUAL DO PROTÓTIPO NA TELA
     img_viz = img.copy()
-    # Desenha o retângulo verde oficial centralizado dinamicamente pela IA no núcleo profundo
     cv2.rectangle(img_viz, (xmin, ymin), (xmax, ymax), (0, 255, 0), 4)
-    st.image(img_viz, channels="BGR", caption="Área de Leitura Restrita ao Núcleo da Fenda (Centro de Massa Ativo)", use_container_width=True)
+    st.image(img_viz, channels="BGR", caption="Área de Amostragem Ampliada para Diluição de Reflexos Especulares", use_container_width=True)
     
-    # 9. MOTOR DE DECISÃO INTELIGENTE ESTÁVEL (Régua Histórica Restaurada)
+    # 9. MOTOR DE DECISÃO INTELIGENTE ORIGINAL (Régua Histórica Intacta e Estável)
     
     # REGRA DA CATARATA BRANCA (G5): Saturação de cor muito baixa (gesso leitoso) + Brilho expressivo
     if media_s < 45.0 and media_v > 115.0:
@@ -98,7 +96,7 @@ if arquivo is not None:
         conduta = "Dureza máxima (rocha). Absorção cromática severa. Exige proteção endotelial máxima (Soft-Shell rígido) e parâmetros de alta energia torsional (Centurion Ozil 100% Contínuo)."
         faco_param = {"Torsional (Ozil)": "100% Contínuo", "Faco Longitudinal": "20-30% em Pulso", "Vácuo Máximo": "450-500 mmHg", "Fluxo de Aspiração": "40-45 cc/min", "IOP Alvo": "80 mmHg"}
     
-    # ESCALA PROGRESSIVA NUCLEAR TÍPICA (G0 a G4) - Baseada no Brilho V Concentrado
+    # ESCALA PROGRESSIVA NUCLEAR TÍPICA ORIGINAL (MANTIDA RIGOROSAMENTE INTACTA)
     else:
         if media_v <= 50.0:
             laudo = "G0 - Cristalino Transparente / Catarata Nuclear Incipiente"
@@ -131,7 +129,7 @@ if arquivo is not None:
     st.markdown("### 📊 Laudo Computacional")
     st.subheader(laudo)
     
-    # NOVA TABELA CIENTÍFICA DE MÉTRICAS DO NÚCLEO LENTICULAR (ITU-R BT.601 + HSV + RGB)
+    # Matriz Científica de Métricas do Núcleo Lenticular
     st.markdown("#### 🔬 Matriz de Parâmetros Ópticos")
     dados_metricas = {
         "Métrica Analisada": [
